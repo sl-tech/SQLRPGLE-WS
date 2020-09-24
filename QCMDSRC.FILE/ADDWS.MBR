@@ -1,0 +1,5 @@
+             CMD        PROMPT('Add Web Service Request')
+             PARM       KWD(SERVICE) TYPE(*CHAR) LEN(64) MIN(1) +
+                          PROMPT('Service name')
+             PARM       KWD(PATH) TYPE(*CHAR) LEN(200) MIN(1) +
+                          PROMPT('Path to WS payload')

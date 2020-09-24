@@ -1,0 +1,139 @@
+        ctl-opt dftactgrp(*no) actgrp(*new) ALWNULL(*INPUTONLY)
+                      bnddir('*LIBL/TOUCH');
+
+        // IFS procedures
+       /copy qrpgleref,cifsio_h
+       /copy qrpgleref,wsapi_h
+
+        // Program parameters
+          dcl-pi DSPRS;
+            parRequest packed(9:0) const;
+          end-pi;
+
+        // Set SQL options
+          exec sql
+            set option commit = *none, datfmt = *iso;
+
+          dcl-s count packed(3:0);
+          dcl-s error ind;
+          dcl-s request  packed(9:0);
+          dcl-s status   char(10)   ;
+          dcl-s temp     varchar(32000)  ;
+
+          // Check request exists
+          if %parms() = 1;
+            request = parRequest;
+          else;
+            exec sql
+              select max(RQID) into :request
+              from   WSREQPF;
+          endIf;
+
+          // Check request exists
+          exec sql
+            select count(*) into :count
+            from   WSREQPF
+            where  RQID = :request;
+
+          if count = *zero;
+            sendMesg('Request does not exist');
+            error = *on;
+          endIf;
+
+          if not error;
+            exec sql
+              select RQSTATUS into :status
+              from   WSREQPF
+              where  RQID = :request;
+
+            sendMesg('Request ' + status);
+
+            select;
+            when status = 'PENDING';
+              // do nothing
+
+            when status = 'COMPLETE';
+              // show payload
+              apiInitWSResponse(request);
+              temp    = apiGetWSRespPayload();
+              displayXML(temp);
+            when status = 'ERROR';
+              // show error from WSRESPF
+              apiInitWSResponse(request);
+              temp   = apiGetWSRespHeader();
+              displayXML(temp);
+              temp    = apiGetWSRespPayload();
+              displayXML(temp);
+
+            endSl;
+          endIf;
+          return;
+        //-----------------------------------------------------------------------
+        dcl-proc sendMesg;
+          dcl-pi *n;
+            mesg char(256) value;
+          end-pi;
+
+          dcl-pr sndPgmMsg extpgm('QMHSNDPM');
+            mesgID         char(   7)  const;
+            qualMesgFile   char(  20)  const;
+            mesgData       char( 256)  const;
+            mesgDataLen     int(  10)  const;
+            mesgType       char(  10)  const;
+            callStkEnt     char(  10)  const;
+            callStkCnt      int(  10)  const;
+            mesgKey        char(   4)  const;
+            errorCode      like(errCode) const;
+          end-pr;
+
+          dcl-ds errCode;
+            bytesProv       int(  10) inz(0);
+            bytesAvail      int(  10) inz(0);
+          end-ds;
+
+          dcl-s mesgKey  char(4);
+
+          sndPgmMsg('CPF9898'
+                   :'QCPFMSG   *LIBL'
+                   :mesg
+                   :%len(%trim(mesg))
+                   :'*INFO'
+                   :'*EXT'
+                   :0
+                   :mesgKey
+                   :errCode );
+          return;
+        end-proc;
+        //-----------------------------------------------------------------------
+        dcl-proc displayXML;
+          dcl-pi *n;
+            xml  like(temp) value;
+          end-pi;
+
+          dcl-pr callcmd extpgm('QCMDEXC');
+            cmd            char(  256) const;
+            cmdLen        packed(15:5) const;
+          end-pr;
+
+          dcl-s outfile sqltype(CLOB_FILE);
+          dcl-s cmd     char(256);
+
+          dcl-s mesgKey  char(4);
+
+          clear outfile;
+          outfile_name = '/touch/temp.xml';
+          outfile_nl   = %len(%trimr(outfile_name));
+          outfile_fo   = SQFCRT;
+
+          // Delete the file
+          cmd = 'RMVLNK ''/touch/temp.xml''';
+          callcmd(cmd:%len(%trimr(cmd)));
+
+          // Just do it all for me! Create file and populate with data
+          exec sql SET :outfile = :xml;
+
+          cmd = 'DSPF ''/touch/temp.xml''';
+          callcmd(cmd:%len(%trimr(cmd)));
+
+          return;
+        end-proc;

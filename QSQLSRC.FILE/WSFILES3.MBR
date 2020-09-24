@@ -1,0 +1,19 @@
+     CREATE OR REPLACE TABLE SLOWS/WSREQPF
+           (RQID          INT           NOT NULL PRIMARY KEY
+            GENERATED ALWAYS AS IDENTITY (START WITH 1 INCREMENT BY 1),
+            RQSERVICE     CHAR(128)     ,
+            RQURL         CHAR(512)     ,
+            RQSTATUS      CHAR(  1)     NOT NULL,
+            RQHEADER      CHAR(512)     ,
+            RQCREATETS    TIMESTAMP     ,
+            RQSTARTTS     TIMESTAMP     ,
+            RQENDTS       TIMESTAMP     ,
+            RQPAYLOAD     XML           );
+
+
+     CREATE OR REPLACE TABLE SLOWS/WSRESPF
+           (RSID          INT           NOT NULL PRIMARY KEY,
+            RSSQL         CHAR(10)      ,
+            RSHEADER      CHAR(512)     ,
+            RSPAYLOAD     XML           ,
+            RSRESPTS      TIMESTAMP     );

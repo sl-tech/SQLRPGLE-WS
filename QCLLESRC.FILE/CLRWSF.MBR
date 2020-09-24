@@ -1,0 +1,7 @@
+             PGM
+             ENDTCH
+             RUNSQLSTM  SRCFILE(TOUCH/QSQLSRC) SRCMBR(TOUCHTRX) +
+                          COMMIT(*NONE) ERRLVL(30)
+             ERASE      OBJLNK('/touch/touch-*.log')
+             MONMSG     MSGID(CPFA093)
+             ENDPGM

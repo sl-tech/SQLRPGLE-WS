@@ -1,0 +1,42 @@
+             PGM        PARM(&FILE)
+             DCL        VAR(&FILE) TYPE(*CHAR) LEN(4)
+             DLTSPLF    FILE(*SELECT)
+             IF         COND(&FILE *EQ '*YES') THEN(DO)
+             RUNSQLSTM  SRCFILE(TOUCH/QSQLSRC) SRCMBR(TOUCHTRX) +
+                          COMMIT(*NONE) ERRLVL(30)
+             ENDDO
+             DLTBNDDIR  BNDDIR(TOUCH/TOUCH)
+             MONMSG     MSGID(CPF0000)
+             CRTBNDDIR  BNDDIR(TOUCH/TOUCH)
+             CRTRPGMOD  MODULE(TOUCH/WSLOG) SRCFILE(TOUCH/QRPGLESRC) +
+                          DBGVIEW(*SOURCE)
+             CRTSQLRPGI OBJ(TOUCH/WSSQL) SRCFILE(TOUCH/QRPGLESRC) +
+                          OBJTYPE(*MODULE) DBGVIEW(*SOURCE) COMMIT(*NONE)
+             CRTSQLRPGI OBJ(TOUCH/WSAPI) SRCFILE(TOUCH/QRPGLESRC) +
+                          COMMIT(*NONE) OBJTYPE(*MODULE) +
+                          DBGVIEW(*SOURCE)
+             CRTSRVPGM  SRVPGM(TOUCH/TOUCH) MODULE(TOUCH/WSLOG +
+                          TOUCH/WSSQL TOUCH/WSAPI)
+             ADDBNDDIRE BNDDIR(TOUCH/TOUCH) OBJ((TOUCH/TOUCH))
+             CRTSQLRPGI OBJ(TOUCH/STRTCH) SRCFILE(TOUCH/QRPGLESRC) +
+                          OBJTYPE(*PGM) DBGVIEW(*SOURCE)
+             CRTSQLRPGI OBJ(TOUCH/WSPRCSR) SRCFILE(TOUCH/QRPGLESRC) +
+                          OBJTYPE(*PGM) DBGVIEW(*SOURCE)
+             CRTSQLRPGI OBJ(TOUCH/WSPROC) SRCFILE(TOUCH/QRPGLESRC) +
+                          OBJTYPE(*PGM) DBGVIEW(*SOURCE)
+             CRTSQLRPGI OBJ(TOUCH/WSPROCMON) SRCFILE(TOUCH/QRPGLESRC) +
+                          OBJTYPE(*PGM) DBGVIEW(*SOURCE)
+             CRTBNDCL   PGM(TOUCH/ENDTCH) SRCFILE(TOUCH/QCLLESRC) +
+                          DFTACTGRP(*NO) ACTGRP(*NEW) DBGVIEW(*SOURCE)
+             CRTBNDCL   PGM(TOUCH/RSTTCH) SRCFILE(TOUCH/QCLLESRC) +
+                          DFTACTGRP(*NO) ACTGRP(*NEW) DBGVIEW(*SOURCE)
+             CRTSQLRPGI OBJ(TOUCH/ADDWS) SRCFILE(TOUCH/QRPGLESRC) +
+                          OBJTYPE(*PGM) DBGVIEW(*SOURCE)
+             CRTSQLRPGI OBJ(TOUCH/DSPWS) SRCFILE(TOUCH/QRPGLESRC) +
+                          OBJTYPE(*PGM) DBGVIEW(*SOURCE)
+   /*        CRTDSPF    FILE(TOUCH/TCH001SF) SRCFILE(TOUCH/QDDSSRC)     */
+   /*        CRTBNDRPG  PGM(TOUCH/TCH001SF) DFTACTGRP(*NO) +            */
+   /*                     ACTGRP(*NEW) DBGVIEW(*SOURCE)                 */
+             WRKSPLF
+
+             ENDPGM

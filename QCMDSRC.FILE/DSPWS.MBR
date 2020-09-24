@@ -1,0 +1,3 @@
+             CMD        PROMPT('Display Web Service Response')
+             PARM       KWD(REQUEST) TYPE(*DEC) LEN(9) MIN(0) +
+                          PROMPT('Request ID')

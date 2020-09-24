@@ -1,0 +1,132 @@
+        ctl-opt dftactgrp(*no) actgrp(*new) ALWNULL(*INPUTONLY)
+                      bnddir('*LIBL/TOUCH');
+        // IFS procedures
+       /copy qrpgleref,cifsio_h
+
+        // Program parameters
+          dcl-pi ADDWS;
+            parService  char( 64) const;
+            parXMLpath  char(200) const;
+          end-pi;
+
+          dcl-s count packed(3:0);
+          dcl-s error ind;
+
+        // Set SQL options
+          exec sql
+            set option commit = *none, datfmt = *iso;
+
+        // Local variables
+          dcl-s service  char(  64);
+          dcl-s reqid  packed( 9:0);
+          dcl-s request  char(32000);
+          dcl-s zero  timestamp inz;
+          dcl-s now   timestamp   ;
+          dcl-s path  char(200);
+          dcl-s mode  char(200);
+          dcl-s ptr   pointer;
+          dcl-s data  char(32000);
+
+          // Check service exists
+          exec sql
+            select count(*) into :count
+            from   WSSERVPF
+            where  SVSERVICE = :parService;
+          if count = *zero;
+            sendMesg('Service not configured');
+            error = *on;
+          endIf;
+
+          if not error;
+            // Populate the calls
+            service = parService;
+            path = %trim(parXMLpath) + x'00';
+            mode = 'r' + x'00';
+            ptr  = fopen(%addr(path):%addr(mode));
+
+            if (ptr =  *null);
+              sendMesg('File path could not be opened');
+              error = *on;
+            endIf;
+          endIf;
+
+          if not error;
+            // Populate the payload for request
+            dow (fgets(%addr(data):32000:ptr) <> *null);
+              data = %xlate(x'00':' ':data);               //End of record
+            //data = %xlate(x'25':' ':data);               //Line feed       (LF)
+            //data = %xlate(x'0D':' ':data);               //Carriage return (CR)
+            //data = %xlate(x'05':' ':data);               //Tab
+              request = %trim(request) + %trim(data);
+              data = *blank;
+            enddo;
+
+            now = %timestamp();
+            zero= %timestamp('0001-01-01-00.00.00.000000');
+
+            // Create request
+            exec sql
+              insert into WSREQPF
+                   (
+                     RQSERVICE      ,
+                     RQSTATUS       ,
+                     RQCREATETS     )
+              values(                          //RQID
+                     :service       ,          //RQSERVICE
+                     'PENDING'      ,          //RQSTATUS
+                     :now           );         //RQCREATETS
+
+            // Get the id just created
+            exec sql
+              select identity_val_local()
+              into :reqid
+              from sysibm.sysdummy1;
+
+            // Store payload separately
+            exec sql
+              insert into WSRQXPF
+                   ( RQXID          ,
+                     RQXPAYLOAD     )
+              values(:reqid         ,          //RQID
+                     :request       );         //RQPAYLOAD
+
+            sendMesg('Request created');
+          endif;
+
+          return;
+
+        dcl-proc sendMesg;
+          dcl-pi *n;
+            mesg char(256) value;
+          end-pi;
+
+          dcl-pr sndPgmMsg extpgm('QMHSNDPM');
+            mesgID         char(   7)  const;
+            qualMesgFile   char(  20)  const;
+            mesgData       char( 256)  const;
+            mesgDataLen     int(  10)  const;
+            mesgType       char(  10)  const;
+            callStkEnt     char(  10)  const;
+            callStkCnt      int(  10)  const;
+            mesgKey        char(   4)  const;
+            errorCode      like(errCode) const;
+          end-pr;
+
+          dcl-ds errCode;
+            bytesProv       int(  10) inz(0);
+            bytesAvail      int(  10) inz(0);
+          end-ds;
+
+          dcl-s mesgKey  char(4);
+
+          sndPgmMsg('CPF9898'
+                   :'QCPFMSG   *LIBL'
+                   :mesg
+                   :%len(%trim(mesg))
+                   :'*INFO'
+                   :'*EXT'
+                   :0
+                   :mesgKey
+                   :errCode );
+          return;
+        end-proc;

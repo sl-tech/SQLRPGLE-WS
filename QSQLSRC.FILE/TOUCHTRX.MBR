@@ -1,0 +1,39 @@
+     DROP           TABLE    TOUCH/WSREQPF;
+     CREATE OR REPLACE TABLE TOUCH/WSREQR
+           (RQID          INT           NOT NULL
+            GENERATED ALWAYS AS IDENTITY (START WITH 1 INCREMENT BY 1),
+            RQSERVICE     CHAR( 64)     NOT NULL,
+            RQSTATUS      CHAR( 10)     NOT NULL,
+            RQCREATETS    TIMESTAMP     NOT NULL,
+            RQINSTNC      SMALLINT      NOT NULL,
+            PRIMARY KEY (RQID)          );
+     RENAME TABLE TOUCH/WSREQR TO WSREQPF;
+
+     DROP           TABLE    TOUCH/WSRQXPF;
+     CREATE OR REPLACE TABLE TOUCH/WSRQXR
+           (RQXID         INT           NOT NULL,
+            RQXPAYLOAD    CLOB(32000)   ,
+            PRIMARY KEY (RQXID)         );
+     RENAME TABLE TOUCH/WSRQXR TO WSRQXPF;
+
+     DROP           TABLE    TOUCH/WSRESPF;
+     CREATE OR REPLACE TABLE TOUCH/WSRESR
+           (RSRQID        INT           NOT NULL,
+            RSOCC         INT           NOT NULL,
+            RSRQURL       CHAR(512)     ,
+            RSRQHDR       CHAR(512)     ,
+            RSSTATUS      CHAR(10)      NOT NULL,
+            RSRESPCOD     CHAR(10)      ,
+            RSHEADER      CHAR(512)     ,
+            RSSTARTTS     TIMESTAMP     ,
+            RSENDTS       TIMESTAMP     ,
+            PRIMARY KEY (RSRQID, RSOCC) );
+     RENAME TABLE TOUCH/WSRESR TO WSRESPF;
+
+     DROP           TABLE    TOUCH/WSRSXPF;
+     CREATE OR REPLACE TABLE TOUCH/WSRSXR
+           (RSXRQID       INT           NOT NULL,
+            RSXOCC        INT           NOT NULL,
+            RSXPAYLOAD    CLOB(32000)   ,
+            PRIMARY KEY (RSXRQID, RSXOCC) );
+     RENAME TABLE TOUCH/WSRSXR TO WSRSXPF;

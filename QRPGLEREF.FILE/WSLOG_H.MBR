@@ -1,0 +1,31 @@
+        // Logging procedures
+        dcl-pr logGetConfig ind;
+        end-pr;
+
+        dcl-pr logGetProcessors zoned(1:0);
+        end-pr;
+
+        dcl-pr logGetJobDesc   char(21);
+        end-pr;
+
+        dcl-pr logGetJobQueue  char(21);
+        end-pr;
+
+        dcl-pr logGetJobPriority char( 5);
+        end-pr;
+
+        dcl-pr logGetJobCCSID char( 5);
+        end-pr;
+
+        dcl-pr logGetIgnoreSQL char(100);
+        end-pr;
+
+        dcl-pr logOpen      ind;
+        end-pr;
+
+        dcl-pr logWrite     ind;
+          parLine char(512) value;
+        end-pr;
+
+        dcl-pr logClose;
+        end-pr;

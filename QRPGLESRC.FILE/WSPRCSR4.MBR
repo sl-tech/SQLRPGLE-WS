@@ -1,0 +1,456 @@
+        //---------------------------------------------------------
+        // This program is deprecated - use WSPROC and WSPROCMON
+        //---------------------------------------------------------
+        ctl-opt dftactgrp(*no) actgrp('TOUCH') ALWNULL(*INPUTONLY)
+                bnddir('*LIBL/TOUCH');
+
+        //---------------------------------------------------------
+        // P R O T O T Y P E S
+        //---------------------------------------------------------
+
+        // WS copy files
+       /copy qrpgleref,wslog_h
+       /copy qrpgleref,wssql_h
+
+        //---------------------------------------------------------
+        // V A R I A B L E S
+        //---------------------------------------------------------
+
+        dcl-ds WSREQPF ext qualified;
+        end-ds;
+
+        dcl-ds WSRQXPF ext qualified;
+          rqxpayload sqltype(CLOB: 32000);
+        end-ds;
+
+        dcl-ds WSRESPF ext qualified;
+        end-ds;
+
+        dcl-ds WSRSXPF ext qualified;
+          rsxpayload sqltype(CLOB: 32000);
+        end-ds;
+
+        dcl-ds WSSERVPF ext qualified;
+        end-ds;
+
+          // CLOB data type equates to data structure
+          // e.g.
+          // dcl-ds data;
+          //   data_len;
+          //   data_data;
+          // end-ds;
+
+        dcl-s gJob char(30);
+
+        //---------------------------------------------------------
+        // M A I N L I N E
+        //---------------------------------------------------------
+
+        // Set SQL options
+        exec sql
+          set option commit = *none, datfmt = *iso;
+
+        // Initialise the program
+        if initialise();
+          // Check if job is killed
+          doU quitLoop();
+
+            // Read through pending web service requests
+            selectWS();
+            doW fetchWS();
+
+              // Get the service details
+              getServiceWS();
+
+              // Process the QS request
+              processWS();
+
+            endDo;
+
+            // Kill locks
+            closeWS();
+          endDo;
+
+        endIf;
+
+        tidyUp();
+
+        return;
+
+        //---------------------------------------------------------
+        // P R O C E D U R E S
+        //---------------------------------------------------------
+
+        //-----------------------------------------------------------------------
+        // Program won't start if not initialised
+        //-----------------------------------------------------------------------
+        dcl-proc initialise;
+          dcl-pi *n ind;
+          end-pi;
+
+          dcl-s occ zoned(2:0);
+          dcl-s ok  ind inz(*on);
+
+          // Retrieve job name
+          exec sql
+            set :gJob = qsys2.job_name;
+
+          if logOpen();
+            logWrite('Web service processor job: '+%trim(gJob)+' started.');
+          else;
+            logClose();
+            ok = *off;
+          endIf;
+
+          // Retrieve the occurrence of the processor from the job name
+          monitor;
+            occ = %int(%subst(%trimr(gJob):%len(%trimr(gJob))-1:2));
+          on-error;
+            occ = 1;
+          //logWrite('Web service processor job: '+%trim(gJob)+' misnamed.');
+          //ok  = *off;
+          endMon;
+
+          if ok;
+            // Delete any previous job
+            exec sql
+              delete from WSJOBSPF
+              where  JBOCCRNC = :occ;
+            // Insert into the job monitor file
+            exec sql
+              insert into WSJOBSPF
+              values (:gJob, :occ, '*ACTIVE');
+            // Get config
+            logGetConfig();
+          endIf;
+
+          if not ok;
+            logWrite('Web service processor did not initialise.');
+          endIf;
+
+          return ok ;
+
+        end-proc;
+
+        //-----------------------------------------------------------------------
+        dcl-proc quitLoop;
+          dcl-pi *n ind;
+          end-pi;
+
+          dcl-s jobStatus char(10);
+
+          dcl-pr sleep int(10:0)  extproc('sleep');
+            seconds    uns(10:0) value;
+          end-pr;
+
+          // Retrieve the job status in case we've been told to end
+          exec sql
+            select JBSTATUS into :jobStatus
+            from   WSJOBSPF
+            where  JBNAME = :gJob;
+
+          if jobStatus = '*ENDING' or
+             jobStatus = '*ENDED'  ;
+            // Kill the loop
+            return *on;
+          endIf;
+
+          // Wait before going through the loop again
+          sleep(5);
+          return *off;
+
+        end-proc;
+
+        //-----------------------------------------------------------------------
+        dcl-proc selectWS;
+
+          exec sql
+            declare TOUCHC1 cursor for
+            (select * from WSREQPF
+             where  rqstatus = 'PENDING')
+            for update;
+
+          exec sql
+            open    TOUCHC1;
+
+          return;
+        end-proc;
+
+        //-----------------------------------------------------------------------
+        dcl-proc fetchWS;
+          dcl-pi *n ind;
+          end-pi;
+
+          dcl-s eof ind;
+
+          // If not cleared it messes up the payload fetch
+          clear WSREQPF;
+          clear WSRQXPF;
+
+          exec sql
+            fetch TOUCHC1 into :WSREQPF;
+
+          // Get the payload stored separately
+          exec sql
+            select * into :WSRQXPF
+            from   WSRQXPF
+            where  RQXID   = :WSREQPF.rqid
+            fetch first row only ;
+
+          // Check for end of file
+          sqlCheck();
+          if sqlGetEOF();
+            return *off;
+          endIf;
+
+          logWrite('Processing request number ' + %trim(%char(WSREQPF.rqid)));
+
+          return *on;
+
+        end-proc;
+
+        //-----------------------------------------------------------------------
+        dcl-proc closeWS;
+
+          exec sql
+            close TOUCHC1;
+
+          return;
+
+        end-proc;
+
+        //-----------------------------------------------------------------------
+        dcl-proc getServiceWS;
+          dcl-s host char(64);
+          dcl-s string  char(256);
+          dcl-s replace char(1024);
+          dcl-s header  char(2048);
+          dcl-s myxml sqltype(XML_CLOB:30000);
+
+          // Get service details
+          exec sql
+            select * into :WSSERVPF
+            from   WSSERVPF
+            where  SVSERVICE = :WSREQPF.rqservice
+            fetch first row only ;
+
+          // Check XML if needed
+          if WSSERVPF.svpaytype = 'XML';
+            monitor;
+              myxml = WSRQXPF.rqxpayload_data;
+            on-error;
+              logWrite('XML was not well formed.');
+            endMon;
+          endIf;
+
+          // Get server details
+          exec sql
+            select HSHOST into :host
+            from   WSHOSTPF
+            where  HSSERVER = :WSSERVPF.svserver
+            fetch first row only ;
+
+          if %scan('<httpHeader>':WSSERVPF.svheader) > 0;
+            // Add behavioural attributes to web service call
+            if WSSERVPF.svcntimeot > 0;
+              string = 'connectionTimeout="'
+                     + %trim(%char(WSSERVPF.svcntimeot)) + '"';
+            endIf;
+            if WSSERVPF.svrdtimeot > 0;
+              string = %trimr(string) + ' '
+                     + 'readTimeout="'+%trim(%char(WSSERVPF.svrdtimeot)) + '"';
+            endIf;
+            if WSSERVPF.svfllwrdct = 'true';
+              string = %trimr(string) + ' ' + 'followRedirects="true"';
+            endIf;
+            if WSSERVPF.svfllwrdct = 'false';
+              string = %trimr(string) + ' ' + 'followRedirects="false"';
+            endIf;
+            if WSSERVPF.svusecache = 'true';
+              string = %trimr(string) + ' ' + 'useCaches="true"';
+            endIf;
+            if WSSERVPF.svusecache = 'false';
+              string = %trimr(string) + ' ' + 'useCaches="false"';
+            endIf;
+
+            if string <> *blanks;
+              header = WSSERVPF.svheader;
+              replace='<httpHeader ' + %trim(string) + '>';
+              header = %scanrpl('<httpHeader>'
+                               :%trim(replace):WSSERVPF.svheader);
+              WSSERVPF.svheader = header;
+            endIf;
+          endIf;
+
+          // Build url and header to web service
+          WSRESPF.rsrqurl = %trim(host) + %trim(WSSERVPF.svendpt);
+          logWrite('URL ' + WSRESPF.rsrqurl);
+          WSRESPF.rsrqhdr = WSSERVPF.svheader;
+          logWrite('Request header ' + WSSERVPF.svheader);
+
+          return;
+
+        end-proc;
+
+        //-----------------------------------------------------------------------
+        dcl-proc processWS;
+
+          dcl-s  url            char(1024);
+          dcl-s  httpHeader     char(2048);
+          dcl-s  payload        char(32000);
+          dcl-s  responseHeader varchar(2048);
+          dcl-s  response       varchar(30000);
+          dcl-s  start          timestamp   ;
+          dcl-s  end            timestamp   ;
+          dcl-s  state          char(5)     ;
+          dcl-s  status         char(10)    ;
+          dcl-s  count          zoned(3:0)  ;
+          dcl-s  error          ind         ;
+          dcl-s  occ            zoned(5:0) inz(0);
+
+          // Populate request parameters
+          payload    = WSRQXPF.rqxpayload_data;
+          httpHeader = WSRESPF.rsrqhdr   ;
+          url        = WSRESPF.rsrqurl   ;
+          start      = %timestamp();
+          logWrite('Request payload ' + %trimr(payload));
+
+          // Trigger web service request
+          select;
+          when WSSERVPF.svaction = 'POST';   // create
+          // Put these into their own module?
+            exec sql
+              select          varchar(responseHttpHeader, 2048 ) ,
+                     coalesce(varchar(responseMsg       ,30000 ) ,
+                              varchar(responseHttpHeader, 2048 )  )
+              into   :responseHeader, :response
+              from   table(systools.httppostclobverbose(
+                     :url                        ,
+                     :httpHeader                 ,
+                     :payload                          )
+                          )
+              as     request;
+
+          when WSSERVPF.svaction = 'GET';    // read
+            exec sql
+              select          varchar(responseHttpHeader, 2048 ) ,
+                     coalesce(varchar(responseMsg       ,30000 ) ,
+                              varchar(responseHttpHeader, 2048 )  )
+              into   :responseHeader, :response
+              from   table(systools.httpgetclobverbose(
+                     :url                        ,
+                     :httpHeader                       )
+                          )
+              as     request;
+
+            // TBC
+          when WSSERVPF.svaction = 'PUT';    // update
+            // TBC
+          when WSSERVPF.svaction = 'DELETE'; // delete
+            // TBC
+          endSl;
+
+          // Get the results
+          sqlCheck();
+          error = not sqlGetOK();
+          state =     sqlGetState();
+
+          // Log response
+          if responseHeader <> *blank;
+            logWrite('Response header ' + %trimr(responseHeader));
+          endIf;
+          if response       <> *blank;
+            logWrite('Response payload ' + %trimr(response));
+          endIf;
+
+          // Tag end time
+          end = %timestamp();
+
+          // Update Request File
+          // ===================
+          // Set to complete or error and move to next
+          status = 'COMPLETE';
+          if error;
+            status = 'ERROR';
+          endIf;
+          if responseHeader = *blank;
+            responseHeader = %trimr(sqlGetMesgText()) + ' ' + sqlGetHelpText();
+          endIf;
+          exec sql
+            update WSREQPF
+            set    RQSTATUS  = :status
+            where current of TOUCHC1;
+          sqlCheck();
+
+          // Update Response File
+          // ====================
+
+          // Increment to the latest occurrence
+          exec sql
+            select RSOCC into :occ
+            from   WSRESPF
+            where  RSRQID = :WSREQPF.rqid
+            order  by RSOCC desc;
+          occ = occ + 1;
+          // Temp fix - squeeze response header for storage
+          // if too big we get SQL error
+          if %len(responseHeader) > 512;
+           responseHeader = %subst(responseHeader:1:512);
+          endIf;
+
+          // Can be multiple responses per request
+          exec sql
+            insert into WSRESPF
+                   ( RSRQID         ,          //RSRQID
+                     RSOCC          ,          //RSOCC
+                     RSRQURL        ,          //RSRQURL
+                     RSRQHDR        ,          //RSRQHDR
+                     RSSTATUS       ,          //RSSTATUS
+                     RSRESPCOD      ,          //RSRESPCOD
+                     RSHEADER       ,          //RSHEADER
+                     RSSTARTTS      ,          //RSSTARTTS
+                     RSENDTS        )          //RSENDTS
+            values ( :WSREQPF.rqid  ,          //RSRQID
+                     :occ           ,          //RSOCC
+                     :url           ,          //RSRQURL
+                     :httpHeader    ,          //RSRQHDR
+                     :status        ,          //RSSTATUS
+                     :state         ,          //RSRESPCOD
+                     :responseHeader,          //RSHEADER
+                     :start         ,          //RSSTARTTS
+                     :end           );         //RSENDTS
+          sqlCheck();
+
+          // Store response payload separately
+          exec sql
+            insert into WSRSXPF
+                   ( RSXRQID        ,          //RSXRQID
+                     RSXOCC         ,          //RSXOCC
+                     RSXPAYLOAD     )          //RSXPAYLOAD
+            values ( :WSREQPF.rqid  ,          //RSXRQID
+                     :occ           ,          //RSXOCC
+                     :response      );         //RSXPAYLOAD
+          sqlCheck();
+
+          return;
+
+        end-proc;
+
+
+        //-----------------------------------------------------------------------
+        dcl-proc tidyUp;
+
+          // Write last log entry
+          logWrite('Web service processor job ending...');
+
+          logClose();
+
+          // Update the monitor file to say we ended
+          exec sql
+            update WSJOBSPF
+            set    JBSTATUS = '*ENDED'
+            where  JBNAME = :gJob;
+
+          return;
+
+        end-proc;

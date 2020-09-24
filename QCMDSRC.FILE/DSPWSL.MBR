@@ -1,0 +1,4 @@
+             CMD        PROMPT('Display Web Services Log')
+             PARM       KWD(LOG) TYPE(*CHAR) LEN(132) +
+                          DFT('/touch/processor.log') PROMPT('IFS')
+

@@ -1,0 +1,5 @@
+             PGM        PARM(&WSID)
+             DCL        VAR(&WSID) TYPE(*DEC) LEN(9 0)
+             CALL       PGM(DSPRQ) PARM(&WSID)
+             CALL       PGM(DSPRS) PARM(&WSID)
+             ENDPGM

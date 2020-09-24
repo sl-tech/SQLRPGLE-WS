@@ -1,0 +1,193 @@
+        ctl-opt option(*nodebugio:*srcstmt:*nounref) dftactgrp(*no);
+
+
+        // Program data structure
+          dcl-ds progDS psds qualified;
+            name *proc;
+          end-ds;
+
+        // File declarations
+        // Sub file
+          dcl-f TCH001SF  workstn indds(subfile) sfile(SFL01:Z1RRN);
+          dcl-f WSREQPF keyed rename(WSREQPF:WSREQPFR);
+
+          dcl-c  maxSfl 9999;
+
+        // Global variables
+          dcl-ds subfile qualified;
+            exit      ind pos( 3);
+            refresh   ind pos( 5);
+            sflDspCtl ind pos(30);
+            sflDsp    ind pos(31);
+            sflClr    ind pos(32);
+          end-ds;
+
+
+          dcl-s prevPos  like(Z1POS);
+        //---------------------------------------------------------
+        // M A I N L I N E
+        //---------------------------------------------------------
+
+        // Set SQL options
+        exec sql
+          set option commit = *none, datfmt = *iso;
+
+          // Check service exists
+          Z1SCREEN = %trimr(progDS.name) + '-1';
+
+          loadSfl();
+
+          dow not subfile.exit;
+            write FTR01;
+            exfmt CTL01;
+
+            select;
+              when subfile.refresh;      // Refresh
+                Z1POS     = *zero ;
+                Z1STATUS  = *blank;
+                clear Z1DATE;
+                clear Z1TIME;
+                Z1SERVE   = *blank;
+                prevPos   = *zero ;
+                loadSfl();
+
+              when Z1POS <> prevPos;     // Reposition subfile
+                prevPos = Z1POS;
+                loadSfl();
+
+              when subfile.sflDsp;       // Reposition subfile
+                readSfl();
+
+
+            endSL;
+          endDo;
+
+          *inlr = *on;
+          return;
+
+        // ------------------------------------------------------------
+        //  Load subfile
+        // ------------------------------------------------------------
+        dcl-proc loadSfl;
+          // Clear subfile
+          subfile.sflDspCtl = *off;
+          subfile.sflDsp    = *off;
+          subfile.sflClr    = *on ;
+          write CTL01;
+          subfile.sflDspCtl = *on;
+          subfile.sflClr    = *off;
+
+          Z1OPT = *blank;
+          Z1RRN = *zero;
+
+          // Position file pointer
+        //if Z1POS > 0;
+        //  setLL  Z1POS WSREQPF;
+        //else;
+        //  setLL *loval WSREQPF;
+        //endIf;
+          filterSF();
+         // setLL  Z1POS WSREQPF;
+         // read WSREQPFR;
+          // Read through subfile
+          exec sql
+            fetch SFLC1 into :wsreq;
+
+          //doW not %eof(WSREQPF);
+          doW sqlCod <> 100;
+            Z1RRN += 1;
+            write SFL01;
+            exec sql
+              fetch SFLC1 into :wsreq;
+            //read WSREQPFR;
+
+          endDo;
+
+          if Z1RRN > *zero;
+            subfile.sflDsp = *on;
+          endIf;
+
+          return;
+        end-proc;
+
+        // ------------------------------------------------------------
+        //  Read subfile changes
+        // ------------------------------------------------------------
+        dcl-proc readSfl;
+          // Read through changes
+          readc SFL01;
+          doW not %eof ;
+            // Do the thing we want to do
+            select;
+              when Z1OPT = '1';
+            endSL;
+            // Stop doing it
+            Z1OPT = *blank;    // Clear the option
+            update SFL01;
+
+            readc SFL01;
+          endDo;
+
+          return;
+        end-proc;
+
+        // ------------------------------------------------------------
+        //  Filter subfile records
+        // ------------------------------------------------------------
+        dcl-proc filterSF;
+          dcl-s  c packed(1:0);
+          dcl-s  x packed(1:0);
+          dcl-s  condition  char( 50) dim(9);
+          dcl-s  conditions char(256);
+          dcl-s  timest timestamp;
+
+          // Construct select conditions
+          conditions = *blank;
+          clear condition;
+          c = *zero;
+          if Z1POS > 0;
+            c += 1;
+            condition(c) = ' RQID >= ' + %char(Z1POS);
+          endIf;
+          if Z1STATUS <> *blank;
+            c += 1;
+            condition(c) = ' RQSTATUS = ' + %char(Z1STATUS);
+          endIf;
+          if Z1DATE > %date('0001-01-01');
+            timest = Z1DATE + Z1TIME;
+            c += 1;
+            condition(c) = ' RQCREATETS => ' + %char(timest);
+          endIf;
+          if Z1SERVE <> *blank;
+            c += 1;
+            condition(c) = ' RQSERVICE like ''%' + %trim(Z1SERVE) +'%''';
+          endIf;
+          if c > 0;
+            conditions = 'WHERE ' + condition(1);
+          endIf;
+          if c > 1;
+	          for x = 2 to c;
+	            conditions = %trimr(conditions) + ' AND ' + condition(x);
+	          endFor;
+          endIf;
+          // Probably ignore all the condition stuff above as using SQL below
+
+          // Filter records based on inputs
+          exec sql
+            declare SFLC1   cursor for
+            select * from WSREQPF
+            where  RQID    >= :Z1POS
+            and    RQSTATUS = :Z1STATUS
+            and  ( RQSTATUS = :Z1STATUS  or
+                   RQSTATUS <> ' '         )
+            and    RQCREATETS >= :Z1DATE
+            and    lcase(RQSERVICE) like '%'||lcase(trim(:Z1SERVE))||'%'
+            and  ( lcase(RQSERVICE) like '%'||lcase(trim(:Z1SERVE))||'%' or
+                   RQSERVICE <> ' '                                        )
+            for read only;
+
+          exec sql
+            open    SFLC1;
+
+          return;
+        end-proc;

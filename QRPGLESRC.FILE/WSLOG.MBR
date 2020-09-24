@@ -1,0 +1,239 @@
+        ctl-opt nomain  option(*nodebugio:*srcstmt:*nounref);
+
+      //---------------------------------------------------------------
+      // P R O T O T Y P E S
+      //---------------------------------------------------------------
+
+        // IFS procedures
+       /copy qrpgleref,cifsio_h
+
+        // WS logging procedures
+       /copy qrpgleref,wslog_h
+       /copy qrpgleref,wssql_h
+
+      //---------------------------------------------------------------
+      // V A R I A B L E S
+      //---------------------------------------------------------------
+
+        dcl-ds ifsFileDS qualified template;
+          path char(128);
+          data char(256);
+          mode char(  5);
+          ptr  pointer inz;
+        end-ds;
+
+        dcl-ds glConf  qualified;
+          devMode      ind;
+          processors   zoned(1:0);
+          jobd         char(21);
+          jobq         char(21);
+          jobpty       char( 5);
+          ccsid        char( 5);
+          ignoreSQL    char(100);
+        end-ds;
+
+        dcl-ds gLog likeds(ifsFileDS);
+        dcl-s  gLogOpen ind;
+
+      //---------------------------------------------------------------
+      // P R O C E D U R E S
+      //---------------------------------------------------------------
+
+      //---------------------------------------------------------------
+      // Get configuration
+      //---------------------------------------------------------------
+        dcl-proc logGetConfig export;
+          dcl-pi *n ind;
+          end-pi;
+
+          dcl-ds conf likeds(ifsFileDS);
+          dcl-s  pos  zoned(5:0);
+
+          // Open config file
+          conf.path = '/touch/touch.conf'+ x'00';   // Needs to be here
+          conf.mode = 'r'+ x'00';
+          conf.ptr  = fopen(%addr(conf.path):%addr(conf.mode));
+
+          // Error if the file does not exist
+          if (conf.ptr = *null);
+            return *off;
+          endIf;
+
+          // Read through all the config
+          doW (fgets(%addr(conf.data):%len(conf.data):conf.ptr) <> *null);
+            // Delete spurious characters
+            conf.data = %xlate(x'00':' ':conf.data);       //End of record
+            conf.data = %xlate(x'25':' ':conf.data);       //Line feed       (LF)
+            conf.data = %xlate(x'0D':' ':conf.data);       //Carriage return (CR)
+            conf.data = %xlate(x'05':' ':conf.data);       //Tab
+
+            conf.data = %trim(conf.data);
+
+            // Store config in global data structure
+            select;
+              when %subst(conf.data:1:1) = '#';
+                // Ignore comment line
+              // Development mode
+              when %subst(conf.data:1:8) = 'dev_mode';
+                glConf.devMode = (%scan('true':conf.data) > 0);
+              // Number of processors to spin up
+              when %subst(conf.data:1:10) = 'processors';
+                pos = %scan('=':conf.data) + 1;
+                monitor;
+                  glConf.processors = %int(%subst(conf.data:pos:5));
+                on-error;
+                  glConf.processors = *zero;
+                endMon;
+              // Job description
+              when %subst(conf.data:1: 8) = 'job_desc';
+                pos = %scan('=':conf.data) + 1;
+                glConf.jobd  = %trim(%subst(conf.data:pos:50));
+              // Job queue
+              when %subst(conf.data:1: 9) = 'job_queue';
+                pos = %scan('=':conf.data) + 1;
+                glConf.jobq  = %trim(%subst(conf.data:pos:50));
+              // Job priority
+              when %subst(conf.data:1:12) = 'job_priority';
+                pos = %scan('=':conf.data) + 1;
+                glConf.jobpty = %trim(%subst(conf.data:pos:20));
+              // Job CCSID
+              when %subst(conf.data:1: 9) = 'job_ccsid';
+                pos = %scan('=':conf.data) + 1;
+                glConf.ccsid = %trim(%subst(conf.data:pos:20));
+              when %subst(conf.data:1:10) = 'ignore_sql';
+                pos = %scan('=':conf.data) + 1;
+                glConf.ignoreSQL = %trim(%subst(conf.data:pos:100));
+            endSl;
+
+            conf.data = *blanks;
+
+          endDo;
+
+          fclose(conf.ptr);
+
+          return *on;
+        end-proc;
+
+      //---------------------------------------------------------------
+      // Get number of processors
+      //---------------------------------------------------------------
+        dcl-proc logGetProcessors export;
+          dcl-pi *n zoned(1:0);
+          end-pi;
+          return glConf.processors;
+        end-proc;
+
+      //---------------------------------------------------------------
+      // Get job description
+      //---------------------------------------------------------------
+        dcl-proc logGetJobDesc export;
+          dcl-pi *n char(21);
+          end-pi;
+          if glConf.jobd = *blank;
+            glConf.jobd = '*USRPRF';
+          endIf;
+          return glConf.jobd;
+        end-proc;
+
+      //---------------------------------------------------------------
+      // Get job queue
+      //---------------------------------------------------------------
+        dcl-proc logGetJobQueue export;
+          dcl-pi *n char(21);
+          end-pi;
+          if glConf.jobq = *blank;
+            glConf.jobq = '*JOBD';
+          endIf;
+          return glConf.jobq;
+        end-proc;
+
+      //---------------------------------------------------------------
+      // Get job priority
+      //---------------------------------------------------------------
+        dcl-proc logGetJobPriority export;
+          dcl-pi *n char( 5);
+          end-pi;
+          if glConf.jobpty = *blank;
+            glConf.jobpty = '*JOBD';
+          endIf;
+          return glConf.jobpty;
+        end-proc;
+
+      //---------------------------------------------------------------
+      // Get job ccsid
+      //---------------------------------------------------------------
+        dcl-proc logGetJobCCSID export;
+          dcl-pi *n char( 5);
+          end-pi;
+          if glConf.ccsid = *blank;
+            glConf.ccsid = '*CURRENT';
+          endIf;
+          return glConf.ccsid;
+        end-proc;
+
+      //---------------------------------------------------------------
+      // Get SQL codes to ignore
+      //---------------------------------------------------------------
+        dcl-proc logGetIgnoreSQL export;
+          dcl-pi *n char(100);
+          end-pi;
+          return glConf.ignoreSQL;
+        end-proc;
+
+      //---------------------------------------------------------------
+      // Open log file
+      //---------------------------------------------------------------
+        dcl-proc logOpen export;
+          dcl-pi *n ind;
+          end-pi;
+
+          // Open file
+          gLog.path = '/touch/touch-' + %subst(%char(%timestamp()):1:19)
+                    + '.log'+ x'00';
+          gLog.mode = 'w' + x'00';
+          gLog.ptr = fopen(%addr(gLog.path):%addr(gLog.mode));
+          if gLog.ptr = *null;
+            return *off;
+          endIf;
+          gLogOpen = *on;
+
+          return *on;
+        end-proc;
+
+      //---------------------------------------------------------------
+      // Write to log file
+      //---------------------------------------------------------------
+        dcl-proc logWrite export;
+          dcl-pi *n ind;
+            parLine char(512) value;
+          end-pi;
+
+          dcl-s lLine char(512);
+
+          // Open file the first time
+          if not gLogOpen;
+            if logOpen();
+              gLogOpen = *on;
+            endIf;
+          endIf;
+
+          lLine = %subst(%char(%timestamp()):1:23) + ' ' + parLine;
+          %subst(lLine:512:1) = x'25';
+
+          // Write log record
+          fwrite(%addr(lLine):%len(%trim(lLine)):1:gLog.ptr);
+
+          // Flush it so it appears in log
+          fflush(gLog.ptr);
+
+          return *on;
+        end-proc;
+
+      //---------------------------------------------------------------
+      // Close log file
+      //---------------------------------------------------------------
+        dcl-proc logClose export;
+          fclose(gLog.ptr);
+
+          return;
+        end-proc;

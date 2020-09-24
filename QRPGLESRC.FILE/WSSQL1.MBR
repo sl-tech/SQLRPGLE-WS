@@ -1,0 +1,310 @@
+        ctl-opt nomain  option(*nodebugio:*srcstmt:*nounref);
+
+      //---------------------------------------------------------------
+      // P R O T O T Y P E S
+      //---------------------------------------------------------------
+
+        // IFS procedures
+       /copy qrpgleref,cifsio_h
+
+        // WS logging procedures
+       /copy qrpgleref,wssql_h
+       /copy qrpgleref,wslog_h
+
+         dcl-pr rtvMsg extpgm('QMHRTVM');
+           mesgInfo       char(3000)  options(*varsize);
+           mesgInfoLen     int(  10)  const;
+           format         char(   8)  const;
+           mesgID         char(   7)  const;
+           qualMesgFile   char(  20)  const;
+           replData       char( 270)  const;
+           replDataLen     int(  10)  const;
+           replSubVal     char(  10)  const;
+           replFormatChar char(  10)  const;
+           errorCode      like(errCode) const;
+         end-pr;
+
+         dcl-pr sndPgmMsg extpgm('QMHSNDPM');
+           mesgID         char(   7)  const;
+           qualMesgFile   char(  20)  const;
+           mesgData       char( 256)  const;
+           mesgDataLen     int(  10)  const;
+           mesgType       char(  10)  const;
+           callStkEnt     char(  10)  const;
+           callStkCnt      int(  10)  const;
+           mesgKey        char(   4)  const;
+           errorCode      like(errCode) const;
+         end-pr;
+
+         dcl-pr rcvPgmMsg extpgm('QMHRCVPM');
+           mesgInfo       char(2000)  options(*varsize);
+           mesgInfoLen     int(  10)  const;
+           format         char(   8)  const;
+           callStkEnt     char(  10)  const;
+           callStkCnt      int(  10)  const;
+           mesgType       char(  10)  const;
+           mesgKey        char(   4)  const;
+           waitTime        int(  10)  const;
+           mesgAction     char(  10)  const;
+           errorCode      like(errCode) const;
+         end-pr;
+
+      //---------------------------------------------------------------
+      // V A R I A B L E S
+      //---------------------------------------------------------------
+
+        dcl-ds errCode;
+          bytesProv       int(  10) inz(0);
+          bytesAvail      int(  10) inz(0);
+        end-ds;
+
+        dcl-ds glSQL   qualified;
+          state      char(5);
+          mesgID     char(7);
+          mesgText   varchar(1024);
+          mesgData   varchar(60) dim(9);
+          mesgDataNo packed(3:0);
+          helpText   varchar(1024);
+          ok         ind;
+          eof        ind;
+        end-ds;
+
+        dcl-ds RTVM0200 qualified;
+          bytesRtnd      int(10) ;
+          bytesAvl       int(10) ;
+          mesgSvrty      int(10) ;
+          alertIndex     int(10) ;
+          alertOption   char( 9) ;
+          logIndctr     char( 1) ;
+          reserved      char( 2) ;
+          dftReplyLen    int(10) ;
+          dftReplyAvl    int(10) ;
+          retnMesgLen    int(10) ;
+          retnMesgAvl    int(10) ;
+          retnHelpLen    int(10) ;
+          retnHelpAvl    int(10) ;
+          retnMesg      char(2000);
+        end-ds;
+
+      //---------------------------------------------------------------
+      // P R O C E D U R E S
+      //---------------------------------------------------------------
+
+      //---------------------------------------------------------------
+      // SQL error
+      //---------------------------------------------------------------
+        dcl-proc sqlCheck     export;
+
+          dcl-s mesgData1 char(60);
+          dcl-s mesgData2 char(60);
+          dcl-s mesgData3 char(60);
+          dcl-s mesgData4 char(60);
+          dcl-s mesgData5 char(60);
+          dcl-s mesgData6 char(60);
+          dcl-s mesgData7 char(60);
+          dcl-s mesgData8 char(60);
+          dcl-s mesgData9 char(60);
+          dcl-s str       char(60);
+          dcl-s mesg      char(1024);
+          dcl-s help      char(1024);
+          dcl-s x       packed(1:0) ;
+          dcl-s pos     packed(3:0) ;
+          dcl-c stmCause const('Cause . . . . . :   ');
+          dcl-c stmRecov const('Recovery  . . . :   ');
+
+          clear glSQL;
+
+          // Get last SQL error
+          exec sql
+            get diagnostics condition 1
+            :glSQL.state      = RETURNED_SQLSTATE   ,
+            :glSQL.mesgText   = MESSAGE_TEXT        ,
+            :glSQL.mesgID     = DB2_MESSAGE_ID      ,
+            :mesgData1        = DB2_ORDINAL_TOKEN_1 ,
+            :mesgData2        = DB2_ORDINAL_TOKEN_2 ,
+            :mesgData3        = DB2_ORDINAL_TOKEN_3 ,
+            :mesgData4        = DB2_ORDINAL_TOKEN_4 ,
+            :mesgData5        = DB2_ORDINAL_TOKEN_5 ,
+            :mesgData6        = DB2_ORDINAL_TOKEN_6 ,
+            :mesgData7        = DB2_ORDINAL_TOKEN_7 ,
+            :mesgData8        = DB2_ORDINAL_TOKEN_8 ,
+            :mesgData9        = DB2_ORDINAL_TOKEN_9 ,
+            :glSQL.mesgDataNo = DB2_TOKEN_COUNT     ;
+
+          // Sometimes there is an extra parm....
+          glSQL.mesgDataNo += 1;
+
+          // Unload data into array
+          if mesgData1 <> *blank;
+            glSQL.mesgData(1) = mesgData1;
+            glSQL.mesgData(2) = mesgData2;
+            glSQL.mesgData(3) = mesgData3;
+            glSQL.mesgData(4) = mesgData4;
+            glSQL.mesgData(5) = mesgData5;
+            glSQL.mesgData(6) = mesgData6;
+            glSQL.mesgData(7) = mesgData7;
+            glSQL.mesgData(8) = mesgData8;
+            glSQL.mesgData(9) = mesgData9;
+          endIf;
+
+          // Retrieve message details - for help text specifically
+          rtvMsg(RTVM0200
+                :%size(RTVM0200)
+                :'RTVM0200'
+                :glSQL.mesgID
+                :'QSQLMSG   *LIBL  '
+                :' '
+                :0
+                :'*NO'
+                :'*NO'
+                :errCode      );
+
+          // Retrieve help message details
+          help = %subst(RTVM0200.retnMesg
+                       :RTVM0200.retnMesgLen+1:RTVM0200.retnHelpLen);
+          if help <> *blank;
+            help = %scanrpl(stmCause:'':help:1);
+            pos  = %scan(stmRecov:help);
+            if pos > 0;
+              help = %subst(help:1:pos-1);
+            endIf;
+            for x = 1 to glSQL.mesgDataNo;
+              str  = '&' + %trim(%char(x));
+              help = %scanrpl(%trim(str)
+                             :%trim(glSQL.mesgData(x)):help:1);
+            endFor;
+            glSQL.helpText = help;
+          endIf;
+
+          // Error if the file does not exist
+          select;
+            when  %subst(glSQL.state:1:2) = '00';         // Success
+              glSQL.ok = *on;
+
+            when  %subst(glSQL.state:1:2) = '01';         // Warnings
+
+            when  %subst(glSQL.state:1:2) = '02';         // No records found
+              glSQL.ok = *on;
+              glSQL.eof = *on;
+
+            other;                                  // Escape
+
+          endSl;
+
+
+          logWrite(        %trim(      glSQL.mesgID)
+                   + '-' + %trim(%char(RTVM0200.mesgSvrty))
+                   + '-' + %trimr(mesg));
+          if not glSQL.ok;
+              logWrite(        %trim(      glSQL.mesgID)
+                       + '-' + %trim(%char(RTVM0200.mesgSvrty))
+                       + '-' + %trimr(help));
+          endIf;
+
+          return;
+
+        end-proc;
+
+      //---------------------------------------------------------------
+      // SQL get state
+      //---------------------------------------------------------------
+        dcl-proc sqlGetState  export;
+          dcl-pi *n like(glSQL.state);
+          end-pi;
+
+          return glSQL.state;
+        end-proc;
+
+      //---------------------------------------------------------------
+      // SQL get message ID
+      //---------------------------------------------------------------
+        dcl-proc sqlGetMesgID export;
+          dcl-pi *n like(glSQL.mesgID);
+          end-pi;
+
+          return glSQL.mesgID;
+        end-proc;
+
+      //---------------------------------------------------------------
+      // SQL get message text
+      //---------------------------------------------------------------
+        dcl-proc sqlGetMesgText export;
+          dcl-pi *n like(glSQL.mesgText);
+          end-pi;
+
+          return glSQL.mesgText;
+        end-proc;
+
+      //---------------------------------------------------------------
+      // SQL get message help text
+      //---------------------------------------------------------------
+        dcl-proc sqlGetHelpText export;
+          dcl-pi *n like(glSQL.helpText);
+          end-pi;
+
+          return glSQL.helpText;
+        end-proc;
+
+      //---------------------------------------------------------------
+      // SQL get OK
+      //---------------------------------------------------------------
+        dcl-proc sqlGetOK     export;
+          dcl-pi *n ind;
+          end-pi;
+
+          return glSQL.ok;
+        end-proc;
+
+      //---------------------------------------------------------------
+      // SQL get EOF
+      //---------------------------------------------------------------
+        dcl-proc sqlGetEOF      export;
+          dcl-pi *n ind;
+          end-pi;
+
+          return glSQL.eof;
+        end-proc;
+
+      //---------------------------------------------------------------
+      // SQL get EOF
+      //---------------------------------------------------------------
+        dcl-proc getHelp;
+          dcl-pi *n;
+            parMesgID char(7) const;
+          end-pi;
+
+     D RCVM0200        DS
+     D  bytesReturned                10i 0 inz(0)
+     D  bytesAvailabl                10i 0 inz(0)
+     D  msgSeverity                  10i 0 inz(0)
+     D  msgID                         7A
+     D  msgType                       2A
+     D  msgKey                        4A
+     D  fill_1                      102A
+     D  fill_2                       10i 0 inz(0)
+     D  fill_3                       10i 0 inz(0)
+     D  alertOption                   9A
+     D  fill_4                       10i 0 inz(0)
+     D  fill_5                       10i 0 inz(0)
+     D  lenImpromptu                 10i 0 inz(0)
+     D  fill_6                       10i 0 inz(0)
+     D  lenMessage                   10i 0 inz(0)
+     D  fill_7                       10i 0 inz(0)
+     D  lenHelp                      10i 0 inz(0)
+     D  fill_8                       10i 0 inz(0)
+     D  data                       1000A
+
+          return;
+
+          // Break message (might be for dev mode)
+            rcvPgmMsg( RCVM0200
+                     :1000
+                     :'RCVM0200'
+                     :'*'
+                     :0
+                     :'*LAST'
+                     :' '
+                     :0
+                     :'*SAME'
+                     :errCode );
+        end-proc;

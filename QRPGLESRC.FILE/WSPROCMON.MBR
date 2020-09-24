@@ -1,0 +1,291 @@
+        ctl-opt dftactgrp(*no) actgrp('TOUCH') ALWNULL(*INPUTONLY)
+                bnddir('*LIBL/TOUCH');
+
+        //---------------------------------------------------------
+        // P R O T O T Y P E S
+        //---------------------------------------------------------
+
+        // WS copy files
+       /copy qrpgleref,wslog_h
+       /copy qrpgleref,wssql_h
+
+        //---------------------------------------------------------
+        // V A R I A B L E S
+        //---------------------------------------------------------
+
+        dcl-ds WSREQPF ext qualified;
+        end-ds;
+
+        dcl-s gJob         char(30);
+        dcl-s gJobd        char(21);
+        dcl-s gJobq        char(21);
+        dcl-s gJobpty      char( 5);
+        dcl-s gCcsid       char( 5);
+        dcl-s gInstances zoned(2:0);
+
+        //---------------------------------------------------------
+        // M A I N L I N E
+        //---------------------------------------------------------
+
+        // Set SQL options
+        exec sql
+          set option commit = *none, datfmt = *iso;
+
+        // Initialise the program
+        if initialise();
+          // Check if job is killed
+          doU quitLoop();
+
+            // Check each instance is running
+            manageWS();
+
+            // Assign new requests an instance
+            assignWS();
+
+          endDo;
+
+        endIf;
+
+        tidyUp();
+
+        return;
+
+        //---------------------------------------------------------
+        // P R O C E D U R E S
+        //---------------------------------------------------------
+
+        //-----------------------------------------------------------------------
+        // Program won't start if not initialised
+        //-----------------------------------------------------------------------
+        dcl-proc initialise;
+          dcl-pi *n ind;
+          end-pi;
+
+          dcl-s ok  ind inz(*on);
+
+          dcl-s found ind;
+          dcl-s count zoned(5:0);
+
+          if not logOpen();
+            logClose();
+            ok = *off;
+
+          else;
+
+            // Retrieve job name
+            exec sql
+              set :gJob = qsys2.job_name;
+
+            // Locate any web service jobs already running
+            exec sql
+              select count(*) into :count
+              from  TABLE(QSYS2.ACTIVE_JOB_INFO()) A
+              where JOB_NAME like 'WSPROC%'       ;
+            // Unique name required and configurable
+
+            ok = (count = 0);
+            if ok;
+              logWrite('Web service monitor job '+%trim(gJob)+' started.');
+            else;
+              logWrite('Web service jobs already active');
+            endIf;
+          endIf;
+
+          if ok;
+            // Clear out any old job info
+            exec sql
+              delete from WSJOBSPF;
+
+            // Insert monitor job into the jobs file
+            exec sql
+              insert into WSJOBSPF
+              values (:gJob, 0, '*ACTIVE');
+
+            // Clear old instances from pending WS requests
+            exec sql
+              update  WSREQPF
+              set    RQINSTNC = 0
+              where  RQSTATUS = 'PENDING';
+          endIf;
+
+          if ok;
+            // Get number of instances we need to monitor
+            if not logGetConfig();
+              logWrite('Web service "touch.conf" configuration not valid');
+              ok = *off;
+            else;
+
+              // Grab job config
+              gJobd      = logGetJobDesc();
+              gJobq      = logGetJobQueue();
+              gJobpty    = logGetJobPriority();
+              gCcsid     = logGetJobCCSID();
+              gInstances = logGetProcessors();
+              if gInstances < 1;
+                logWrite('No processors defined in "touch.conf" configuration');
+              endIf;
+            endIf;
+          endIf;
+
+          if not ok;
+            logWrite('Web service monitor did not initialise.');
+          endIf;
+
+          return ok ;
+
+        end-proc;
+
+        //-----------------------------------------------------------------------
+        dcl-proc quitLoop;
+          dcl-pi *n ind;
+          end-pi;
+
+          dcl-s jobStatus char(10);
+
+          dcl-pr sleep int(10:0)  extproc('sleep');
+            seconds    uns(10:0) value;
+          end-pr;
+
+          // Retrieve the job status in case we've been told to end
+          exec sql
+            select JBSTATUS into :jobStatus
+            from   WSJOBSPF
+            where  JBNAME = :gJob;
+
+          if jobStatus = '*ENDING' or
+             jobStatus = '*ENDED'  ;
+            // Kill the loop
+            return *on;
+          endIf;
+
+          // Wait before going through the loop again
+          sleep(5);
+          return *off;
+
+        end-proc;
+
+        //-----------------------------------------------------------------------
+        dcl-proc manageWS;
+
+          dcl-pr runCmd extpgm('QCMDEXC');
+            cmd  char( 512)  const options(*varsize);
+            len packed(15:5) const;
+          end-pr;
+          dcl-s cmdString char(512);
+
+          dcl-s found     ind;
+          dcl-s n         packed(2:0);
+          dcl-s job       char(30);
+          dcl-s jobn   varchar(30);
+          dcl-s jobStat   char(10);
+          dcl-s count     zoned(5:0);
+
+          // Loop through each instance and make sure it is running
+          for n = 1 to gInstances;
+            found = *on;
+            clear jobStat;
+
+            // Find the job name
+            exec sql
+              select JBNAME, JBSTATUS
+              into  :job   ,:jobStat
+              from  WSJOBSPF
+              where JBOCCRNC = :n      ;
+
+            sqlCheck();
+            if sqlGetEOF();
+              found = *off;
+            else;
+              if  jobStat <> '*ENDED'
+              and jobStat <> '*ENDING';
+                clear jobStat;
+                // Check job status
+                exec sql
+                  select JOB_STATUS into :jobStat
+                  from  TABLE(QSYS2.JOB_INFO()) A
+                  where JOB_NAME = :job    ;
+                sqlCheck();
+                if sqlGetEOF()
+                or jobStat = 'OUTQ';
+                  found = *off;
+                  exec sql   // Clear up the entry
+                    delete from  WSJOBSPF
+                    where JBOCCRNC = :n;
+                endIf;
+              endIf;
+            endIf;
+
+            if not found;
+              // Submit the child job - held
+              cmdString = 'SBMJOB CMD(CALL WSPROC) JOB(WSPROC_'
+                      +  %trim(%editw(n:'0  '))     + ') '
+                      + 'JOBD('   + %trim(gJobd)    + ') '
+                      + 'JOBQ('   + %trim(gJobq)    + ') '
+                      + 'JOBPTY(' + %trim(gJobpty)  + ') '
+                      + 'CCSID('  + %trim(gCcsid)   + ') '
+                      + 'HOLD(*YES)';
+              runCmd(cmdString:%len(%trimr(cmdString)));
+
+              // Get the job details
+              jobn = '%/WSPROC_' + %trim(%editw(n:'0  ') + '%') ;
+              exec sql
+                select JOB_NAME, JOB_STATUS
+                into   :job    , :jobStat
+                from  TABLE(QSYS2.JOB_INFO()) A
+                where JOB_NAME like :jobn
+                and   SUBMITTER_JOB_NAME = :gJob
+                and   JOB_STATUS = 'JOBQ'
+                fetch first row only ;
+
+              // Update the job details
+              if job <> *blanks;
+                exec sql
+                  insert into WSJOBSPF
+                  values (:job, :n, '*JOBQ');
+
+                // Release the job
+                cmdString = 'RLSJOB JOB(' + %trim(job) + ')';
+                runCmd(cmdString:%len(%trimr(cmdString)));
+              endIf;
+            endIf;
+            // Guess if it these jobs keep disappearing we need
+            // to monitor
+          endFor;
+
+          return;
+
+        end-proc;
+
+        //-----------------------------------------------------------------------
+        dcl-proc assignWS;
+
+          // Assign each new request to an instance
+          // - uses algorithm to assign instance
+          exec sql
+            update WSREQPF
+            set RQINSTNC =
+               (RQID + 1 - (INT(RQID/:gInstances) * :gInstances))
+            where  RQSTATUS = 'PENDING'
+            and    RQINSTNC = 0;
+
+          return;
+
+        end-proc;
+
+        //-----------------------------------------------------------------------
+        dcl-proc tidyUp;
+
+          // Write last log entry
+          logWrite('Web service monitor job ending...');
+
+          logClose();
+
+          // Update the monitor file to say we ended
+          exec sql
+            update WSJOBSPF
+            set    JBSTATUS = '*ENDED'
+            where  JBNAME = :gJob;
+
+          return;
+
+        end-proc;

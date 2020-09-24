@@ -1,0 +1,48 @@
+     DROP           TABLE    TOUCH/WSREQPF;
+     CREATE OR REPLACE TABLE TOUCH/WSREQPF
+           (RQID          INT           NOT NULL
+            GENERATED ALWAYS AS IDENTITY (START WITH 1 INCREMENT BY 1),
+            RQSERVICE     CHAR(128)     NOT NULL,
+            RQSTATUS      CHAR( 10)     NOT NULL,
+            RQCREATETS    TIMESTAMP     ,
+            RQPAYLOAD     CLOB(32000)   ,
+            PRIMARY KEY (RQID)          );
+
+
+     DROP           TABLE    TOUCH/WSRESPF;
+     CREATE OR REPLACE TABLE TOUCH/WSRESPF
+           (RSRQID        INT           NOT NULL,
+            RSOCC         INT           NOT NULL,
+            RSRQURL       CHAR(512)     ,
+            RSRQHDR       CHAR(512)     ,
+            RSSTATUS      CHAR(10)      NOT NULL,
+            RSRESPCOD     CHAR(10)      ,
+            RSHEADER      CHAR(512)     ,
+            RSSTARTTS     TIMESTAMP     ,
+            RSENDTS       TIMESTAMP     ,
+            RSPAYLOAD     CLOB(32000)   ,
+            PRIMARY KEY (RSRQID, RSOCC) );
+
+     DROP           TABLE    TOUCH/WSSERVPF      ;
+     CREATE OR REPLACE TABLE TOUCH/WSSERVPF
+           (SVSERVICE     CHAR( 64)     NOT NULL PRIMARY KEY,
+            SVACTION      CHAR( 10)     NOT NULL,
+            SVSERVER      CHAR( 64)     NOT NULL,
+            SVENDPT       CHAR(256)     NOT NULL,
+            SVPAYTYPE     CHAR( 10)     NOT NULL,
+            SVHEADER      CHAR(512)     NOT NULL,
+            SVCNTIMEOT     DEC(5,0)     NOT NULL,
+            SVRDTIMEOT     DEC(5,0)     NOT NULL,
+            SVFLLWRDCT    CHAR(  5)     NOT NULL,
+            SVUSECACHE    CHAR(  5)     NOT NULL);
+
+     DROP           TABLE    TOUCH/WSHOSTPF      ;
+     CREATE OR REPLACE TABLE TOUCH/WSHOSTPF
+           (HSSERVER      CHAR( 64)     NOT NULL PRIMARY KEY,
+            HSHOST        CHAR( 64)     NOT NULL);
+
+     DROP           TABLE    TOUCH/WSJOBSPF       ;
+     CREATE OR REPLACE TABLE TOUCH/WSJOBSPF
+           (JBNAME        CHAR( 30)     NOT NULL PRIMARY KEY,
+            JBOCCRNC       DEC(3,0)     NOT NULL,
+            JBSTATUS      CHAR( 10)     NOT NULL) ;

@@ -1,0 +1,84 @@
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns="http://virginmedia/schema/RequestHeader/2/0" xmlns:ns1="http://virginmedia/schema/CreateWorkOrder/3/0">
+   <soapenv:Header>
+      <ns:RequestHeader>
+         <ns:activityName>21CV_Migration</ns:activityName>
+         <ns:senderURI>LadbrokeGrove</ns:senderURI>
+         <ns:userid>SCV_UK</ns:userid>
+         <ns:security/>
+         <ns:securityType>PASSWORD</ns:securityType>
+         <ns:requestTimestamp>yyyy-mm-ddThh:mm:ssZ</ns:requestTimestamp>
+         <ns:service>CreateWorkOrder_V3</ns:service>
+         <ns:version>3</ns:version>
+         <ns:conversationID/>
+         <ns:requestID/>
+      </ns:RequestHeader>
+   </soapenv:Header>
+   <soapenv:Body>
+      <ns1:CreateWorkOrderRequest>
+         <ns1:accountIdentification>
+            <ns1:accountNumber>?????</ns1:accountNumber>
+            <ns1:siteReference>??</ns1:siteReference>
+         </ns1:accountIdentification>
+         <ns1:workOrderHeader>
+            <ns1:callCode>75</ns1:callCode>
+            <ns1:salesRepresentativeIdentifier>69409</ns1:salesRepresentativeIdentifier>
+            <ns1:salesReasonCode>ZZ</ns1:salesReasonCode>
+            <ns1:salesTypeCode>08</ns1:salesTypeCode>
+            <ns1:orderComment>LG Voice Migration</ns1:orderComment>
+            <ns1:billStartDate>yyyy-mm-dd</ns1:billStartDate>
+            <ns1:workOrderTaskCode>CHGSRVOFFY</ns1:workOrderTaskCode>
+            <ns1:retainWorkOrder>1</ns1:retainWorkOrder>
+            <ns1:orderStatusCode>FB</ns1:orderStatusCode>
+         </ns1:workOrderHeader>
+         <ns1:serviceCategory>
+            <ns1:serviceCategoryCode>T</ns1:serviceCategoryCode>
+            <ns1:serviceOccurrence>
+               <ns1:occurrence>
+                  <ns1:resourceOccurrence>??</ns1:resourceOccurrence>
+               </ns1:occurrence>
+               <ns1:service>
+                  <ns1:quantity>1</ns1:quantity>
+                  <ns1:serviceCode>PHONE</ns1:serviceCode>
+                  <ns1:action>Remove</ns1:action>
+               </ns1:service>
+               <ns1:service>
+                  <ns1:quantity>1</ns1:quantity>
+                  <ns1:serviceCode>PHVOC</ns1:serviceCode>
+                  <ns1:action>Add</ns1:action>
+               </ns1:service>
+            </ns1:serviceOccurrence>
+         </ns1:serviceCategory>
+         <ns1:Questionnaire>
+            <ns1:questionnaireContext>Vulnerability</ns1:questionnaireContext>
+            <ns1:QuestionnaireItem>
+               <ns1:question>Are you a vulnerable customer and require a UAES device?</ns1:question>
+               <ns1:AnswerItem>
+                  <ns1:answerCode>N</ns1:answerCode>
+               </ns1:AnswerItem>
+            </ns1:QuestionnaireItem>
+            <ns1:QuestionnaireItem>
+               <ns1:question>Do you possess a mobile phone?</ns1:question>
+               <ns1:AnswerItem>
+                  <ns1:answerCode>Y</ns1:answerCode>
+               </ns1:AnswerItem>
+            </ns1:QuestionnaireItem>
+            <ns1:QuestionnaireItem>
+               <ns1:question>What type of Text Relay device do you use?</ns1:question>
+               <ns1:AnswerItem>
+                  <ns1:answerCode>N</ns1:answerCode>
+               </ns1:AnswerItem>
+            </ns1:QuestionnaireItem>
+            <ns1:QuestionnaireItem>
+               <ns1:question>Do you use devices like telehealth devices, care alarms, fire alarms or security alarms which need to work 24/7?</ns1:question>
+               <ns1:AnswerItem>
+                  <ns1:answerCode>N</ns1:answerCode>
+               </ns1:AnswerItem>
+            </ns1:QuestionnaireItem>
+         </ns1:Questionnaire>
+         <ns1:telephoneServiceSwap>
+            <ns1:fromServiceCode>PHONE</ns1:fromServiceCode>
+            <ns1:toServiceCode>PHVOC</ns1:toServiceCode>
+         </ns1:telephoneServiceSwap>
+      </ns1:CreateWorkOrderRequest>
+   </soapenv:Body>
+</soapenv:Envelope>

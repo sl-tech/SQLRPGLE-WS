@@ -1,0 +1,12 @@
+             PGM        PARM(&WSID)
+             DCL        VAR(&WSID) TYPE(*DEC) LEN(9 0)
+
+             RUNSQL     SQL('DELETE FROM WSREQPF WHERE RQID = ' || +
+                          %CHAR(&WSID)) COMMIT(*NONE)
+             RUNSQL     SQL('DELETE FROM WSRQXPF WHERE RQXID = ' || +
+                          %CHAR(&WSID)) COMMIT(*NONE)
+             RUNSQL     SQL('DELETE FROM WSRESPF WHERE RSRQID = ' || +
+                          %CHAR(&WSID)) COMMIT(*NONE)
+             RUNSQL     SQL('DELETE FROM WSRSXPF WHERE RSXRQID = ' || +
+                          %CHAR(&WSID)) COMMIT(*NONE)
+             ENDPGM

@@ -1,0 +1,31 @@
+        // API procedures
+
+        dcl-pr apiCheckService ind;
+            parService       char(   64) value;
+        end-pr;
+
+        dcl-pr apiCreateWsRequest;
+            parService       char(   64) value;
+            parRequest    varchar(32000) value;
+        end-pr;
+
+        dcl-pr apiInitWsResponse;
+            parRequestID   packed(  9:0) value;
+            parTimeout     packed(  3:0) value options(*nopass);
+        end-pr;
+
+        dcl-pr apiGetWSRequestID packed( 9:0);
+        end-pr;
+
+        dcl-pr apiGetWSStatus         char(   10);
+        end-pr;
+
+        dcl-pr apiGetWSRespCode       char(   10);
+        end-pr;
+
+        dcl-pr apiGetWSRespHeader     char(  512);
+        end-pr;
+
+        dcl-pr apiGetWSRespPayload varchar(32000);
+        end-pr;
+

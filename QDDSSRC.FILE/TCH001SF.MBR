@@ -1,0 +1,55 @@
+     A*%%TS  SD  20180917  133338  L7807674    REL-V7R2M0  5770-WDS
+     A*%%EC
+     A                                      DSPSIZ(27 132 *DS4)
+     A                                      REF(*LIBL/WSREQPF)
+     A                                      PRINT
+     A                                      INDARA
+     A                                      CA03(03 'F3=EXIT')
+     A                                      CA05(05 'F5=REFRESH')
+     A          R SFL01                     SFL
+     A*%%TS  SD  20180907  135436  L7807674    REL-V7R2M0  5770-WDS
+     A            Z1RRN          4S 0H
+     A            Z1OPT          1A  B  8  3
+     A            RQID      R        O  8  6
+     A            RQSTATUS  R        O  8 18
+     A            RQCREATETSR        O  8 30
+     A            RQSERVICE R        O  8 59
+     A          R CTL01                     SFLCTL(SFL01)
+     A*%%TS  SD  20180917  133338  L7807674    REL-V7R2M0  5770-WDS
+     A                                      SFLSIZ(9999)
+     A                                      SFLPAG(0018)
+     A                                      OVERLAY
+     A  32                                  SFLCLR
+     A  31                                  SFLDSP
+     A  30                                  SFLDSPCTL
+     A  30                                  SFLEND(*MORE)
+     A            Z1SCREEN      12A  O  1  2
+     A                                  1 54'Touch Web Service Requests'
+     A                                      COLOR(WHT)
+     A                                  1115TIME
+     A
+     A                                  1125DATE
+     A                                      EDTCDE(Y)
+     A
+     A                                  2  2USER
+     A
+     A                                  2125SYSNAME
+     A
+     A                                  4  2'Options: -
+     A                                      5=Request, -
+     A                                      6=Response, -
+     A                                      E=Error'
+     A                                      COLOR(BLU)
+     A                                  6  2'Opt Request No  Status      Create-
+     A                                       timestamp             Service'
+     A                                      DSPATR(HI)
+     A                                      COLOR(WHT)
+     A            Z1POS          9S 0B  7  6
+     A            Z1STATUS      10A  B  7 18
+     A            Z1DATE          L  B  7 30
+     A            Z1TIME          T  B  7 41
+     A            Z1SERVE       64A  B  7 59
+     A          R FTR01
+     A                                 27  3'F3=Exit   F5=Refresh   -
+     A                                      F13=Configuration'
+     A                                      COLOR(BLU)

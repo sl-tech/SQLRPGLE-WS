@@ -1,0 +1,2 @@
+    update TOUCH/wsjobspf
+    set    JBSTATUS = '*ENDING';

@@ -1,0 +1,174 @@
+        ctl-opt dftactgrp(*no) actgrp(*NEW) ALWNULL(*INPUTONLY)
+                bnddir('*LIBL/TOUCH');
+
+        //---------------------------------------------------------
+        // P R O T O T Y P E S
+        //---------------------------------------------------------
+
+        // IFS procedures
+       /copy qrpgleref,cifsio_h
+
+        // WS logging procedures
+       /copy qrpgleref,wslog_h
+
+        //---------------------------------------------------------
+        // V A R I A B L E S
+        //---------------------------------------------------------
+
+        //---------------------------------------------------------
+        // M A I N L I N E
+        //---------------------------------------------------------
+
+        // Set SQL options
+          exec sql
+            set option commit = *none, datfmt = *iso;
+
+        // Local variables
+          dcl-s error ind inz;
+          dcl-s jobd       char(21);
+          dcl-s jobq       char(21);
+          dcl-s jobpty     char( 5);
+          dcl-s ccsid      char( 5);
+          dcl-s processors like(n);
+          dcl-s n packed(2:0);
+
+          // List of checks before we can start the WS processor
+          // ===================================================
+          // Check if any active processors
+          if activeProcs();
+            error = *on;
+            sendMesg('Touch processors already active');
+          endIf;
+          // Retrieve the configuration
+          if not logGetConfig();
+            error = *on;
+            sendMesg('Touch "touch.conf" configuration not valid');
+          endIf;
+
+          // Retrieve the number of processors we need to start
+          if not error;
+
+          // Grab job config
+            jobd       = logGetJobDesc();
+            jobq       = logGetJobQueue();
+            jobpty     = logGetJobPriority();
+            ccsid      = logGetJobCCSID();
+            processors = logGetProcessors();
+            if processors < 1;
+              error = *on;
+              sendMesg('No processors defined in "touch.conf" configuration');
+            endIf;
+          endIf;
+
+          // Start the processors
+          if not error;
+            submitMonJob();
+            sendMesg('Touch processors starting');
+          endIf;
+
+          return;
+
+        //---------------------------------------------------------
+        // P R O C E D U R E S
+        //---------------------------------------------------------
+
+        //---------------------------------------------------------
+        // Check for active processors
+        //---------------------------------------------------------
+
+        dcl-proc activeProcs;
+          dcl-pi *n ind;
+          end-pi;
+
+          dcl-s found ind;
+          dcl-s count zoned(5:0);
+
+          dcl-s jobName   char(30);
+          dcl-s jobType   char(10);
+          dcl-s jobStatus char(10);
+
+          // Locate any WS processor jobs already running
+          exec sql
+            select count(*) into :count
+            from  TABLE(QSYS2.ACTIVE_JOB_INFO()) A
+            where JOB_NAME LIKE '%WSPROC%' ;
+
+          // if found then put an error message and display on screen
+          found = (count > 0);
+          if found;
+            // Need a list of jobs
+            exec sql
+              select JOB_NAME, JOB_TYPE, JOB_STATUS
+              into   :jobname, :jobType, :jobStatus
+              from   TABLE(QSYS2.ACTIVE_JOB_INFO()) A
+              where  JOB_NAME LIKE '%WSPROC%' ;
+          endIf;
+
+          return found;
+        end-proc;
+
+        //---------------------------------------------------------
+        // Submit new processors
+        //---------------------------------------------------------
+
+        dcl-proc submitMonJob;
+
+          dcl-pr runCmd extpgm('QCMDEXC');
+            cmd  char( 512)  const options(*varsize);
+            len packed(15:5) const;
+          end-pr;
+
+          dcl-s cmdString char(512);
+
+          // Build command
+          cmdString = 'SBMJOB CMD(CALL WSPROCMON) JOB(WSPROC_MON) '
+                    + 'JOBD('   + %trim(jobd)   + ') '
+                    + 'JOBQ('   + %trim(jobq)   + ') '
+                    + 'JOBPTY(' + %trim(jobpty) + ') '
+                    + 'CCSID('  + %trim(ccsid)  + ') ';
+
+          // Run command
+          runCmd(cmdString:%len(%trimr(cmdString)));
+
+          return;
+        end-proc;
+
+        //---------------------------------------------------------
+        // Issue any messages
+        //---------------------------------------------------------
+
+        dcl-proc sendMesg;
+          dcl-pi *n;
+            mesg char(256) value;
+          end-pi;
+
+          dcl-pr sndPgmMsg extpgm('QMHSNDPM');
+            mesgID         char(   7)  const;
+            qualMesgFile   char(  20)  const;
+            mesgData       char( 256)  const;
+            mesgDataLen     int(  10)  const;
+            mesgType       char(  10)  const;
+            callStkEnt     char(  10)  const;
+            callStkCnt      int(  10)  const;
+            mesgKey        char(   4)  const;
+            errorCode      like(errCode) const;
+          end-pr;
+
+          dcl-ds errCode;
+            bytesProv       int(  10) inz(0);
+            bytesAvail      int(  10) inz(0);
+          end-ds;
+
+          dcl-s mesgKey  char(4);
+
+          sndPgmMsg('CPF9898'
+                   :'QCPFMSG   *LIBL'
+                   :mesg
+                   :%len(%trim(mesg))
+                   :'*INFO'
+                   :'*EXT'
+                   :0
+                   :mesgKey
+                   :errCode );
+          return;
+        end-proc;

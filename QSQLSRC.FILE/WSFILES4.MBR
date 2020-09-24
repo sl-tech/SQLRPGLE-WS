@@ -1,0 +1,11 @@
+     CREATE OR REPLACE TABLE SLOWS/WSFUNCPF
+           (FNSERVICE     CHAR( 64)     NOT NULL PRIMARY KEY,
+            FNACTION      CHAR( 10)     NOT NULL,
+            FNHOST        CHAR( 64)     NOT NULL,
+            FNENDPT       CHAR(256)     NOT NULL,
+            FNHEADER      CHAR(512)     NOT NULL);
+
+     CREATE OR REPLACE TABLE SLOWS/WSJOBSPF
+           (JBNAME        CHAR( 30)     NOT NULL PRIMARY KEY,
+            JBOCCRNC       DEC(  3)     NOT NULL,
+            JBSTATUS      CHAR( 10)     NOT NULL)            ;

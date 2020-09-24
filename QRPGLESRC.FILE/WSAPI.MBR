@@ -1,0 +1,287 @@
+        ctl-opt nomain  option(*nodebugio:*srcstmt:*nounref);
+
+      //---------------------------------------------------------------
+      // P R O T O T Y P E S
+      //---------------------------------------------------------------
+
+        // WS API procedures
+       /copy qrpgleref,wsapi_h
+
+        // WS SQL procedures
+       /copy qrpgleref,wssql_h
+
+      //---------------------------------------------------------------
+      // V A R I A B L E S
+      //---------------------------------------------------------------
+
+        dcl-ds api qualified;
+          requestID   packed(9:0)  ;
+          status        char(   10);
+          respCode      char(   10);
+          respHeader    char(  512);
+          response   varchar(32000);
+        end-ds;
+
+      //---------------------------------------------------------------
+      // P R O C E D U R E S
+      //---------------------------------------------------------------
+
+      //---------------------------------------------------------------
+      // API Create WS Request
+      //---------------------------------------------------------------
+        dcl-proc apiCheckService    export;
+          dcl-pi *n ind;
+            parService       char(   64) value;
+          end-pi;
+          dcl-s lCount packed(3:0);
+
+          // Check service exists
+          exec sql
+            select count(*) into :lCount
+            from   WSSERVPF
+            where  SVSERVICE = :parService;
+
+          sqlCheck();
+          if sqlGetFound();
+            return lCount > 0;
+          else;
+            return *off;
+          endIf;
+
+        end-proc;
+      //---------------------------------------------------------------
+      // API Create WS Request
+      //---------------------------------------------------------------
+        dcl-proc apiCreateWSRequest export;
+          dcl-pi *n;
+            parService       char(   64) value;
+            parRequest    varchar(32000) value;
+          end-pi;
+
+          dcl-s lCount packed(3:0);
+          dcl-s lNow   timestamp;
+          dcl-s myCLOB sqltype(CLOB:65531);
+
+          // Clear return variables
+          clear api;
+          // Check service exists
+          exec sql
+            select count(*) into :lCount
+            from   WSSERVPF
+            where  SVSERVICE = :parService;
+
+          if lCount = *zero;
+            api.respCode   = 'APICRTERR';
+            api.respHeader = 'Service "' + %trim(parService) + '" not found';
+
+          else;
+
+            lNow = %timestamp();
+
+            // Create request
+            exec sql
+              insert into WSREQPF
+                   (
+                     RQSERVICE      ,
+                     RQSTATUS       ,
+                     RQCREATETS     ,
+                     RQINSTNC       )
+              values(                          //RQID
+                     :parService    ,          //RQSERVICE
+                     'PENDING'      ,          //RQSTATUS
+                     :lNow          ,          //RQCREATETS
+                     0              );         //RQINSTNC
+            // ** Should check for error here **
+
+            // Get the id just created
+            exec sql
+              select identity_val_local()
+              into :api.requestID
+              from sysibm.sysdummy1;
+
+            // Get the id just created
+            myCLOB_data = %trim(parRequest);
+            myCLOB_len  = %len(%trim(parRequest));
+
+            // Store payload separately
+            exec sql
+              insert into WSRQXPF
+                   ( RQXID          ,
+                     RQXPAYLOAD     )
+              values(:api.requestID ,          //RQID
+                     :myCLOB        );         //RQPAYLOAD
+            // ** Should check for error here **
+
+
+          endIf;
+
+          return;
+
+        end-proc;
+
+      //---------------------------------------------------------------
+      // API Get WS Response
+      //---------------------------------------------------------------
+        dcl-proc apiInitWSResponse export;
+          dcl-pi *n;
+            parRequestID   packed(  9:0) value;
+            parTimeout     packed(  3:0) value options(*nopass);
+          end-pi;
+
+          dcl-pr sleep int(10) extproc('sleep');
+            *n uns(10) value;
+          end-pr ;
+
+          dcl-s myCLOB sqltype(CLOB:65531);
+          dcl-s lLoop  packed(3:0);
+          dcl-s lLeaveLoop ind;
+
+          dcl-s lRespError ind;
+          dcl-s lRespEOF   ind;
+          dcl-s lRespFound ind;
+
+          lLoop = 0;
+          lLeaveLoop = *off;
+
+          doU  lLeaveLoop;
+
+            if lLoop > 0;
+              sleep(1);  // Wait for a second before retrying
+            endIf;
+            lLoop += 1;
+
+            // Get the response status first
+            exec sql
+              select RSSTATUS, RSRESPCOD, RSHEADER
+              into :api.status,:api.respCode,:api.respHeader
+              from   WSRESPF
+              where  RSRQID  = :parRequestID
+              and    RSOCC   = (select max(RSOCC)
+                                from   WSRESPF
+                                where  RSRQID  = :parRequestID
+                                                  );
+            // Check for any issues
+            sqlCheck();
+            // Store this response
+            lRespFound =     sqlGetFound();
+            lRespEOF   =     sqlGetEOF();
+            lRespError = not sqlGetOK();
+            // Check for any issues
+            lLeaveLoop =  lRespError
+                          // Response error
+                       // No timeout - reply with state now
+                       or %parms() = 1 and lRespEOF
+                          // No response (yet)
+                       or %parms() = 1 and lRespFound
+                          // Response found
+
+                       // Timeout - wait for complete or timeout
+                       or %parms() > 1 and lRespFound
+                                       and api.status = 'COMPLETE'
+                          // Response found complete, within timeout
+                       or %parms() > 1 and lRespEOF
+                                       and lLoop > parTimeout;
+                          // Response not found so keep looping until timeout
+
+          endDo;
+
+          select;
+          when lRespFound and api.status = 'COMPLETE';
+            // Get the response
+            exec sql
+              select RSXPAYLOAD into :myCLOB
+              from   WSRSXPF
+              where  RSXRQID = :parRequestID
+              and    RSXOCC  = (select max(RSXOCC)
+                                from   WSRSXPF
+                                where  RSXRQID = :parRequestID
+                                group by RSXOCC    );
+            api.response = %subst(myCLOB_data:1:myCLOB_len);
+
+          // Response timed out internally
+          when %parms() > 1 and lLoop > parTimeout and lRespEOF;
+            api.status = 'APITIMEOUT';
+            api.respCode = 'APIERR';
+            api.respHeader = 'Internal time out';
+
+          // WS response not found
+          when %parms() = 1 and lRespEOF;
+          // Check we have a request
+            exec sql
+              select RQSTATUS into :api.status
+              from   WSREQPF
+              where  RQID = :parRequestID ;
+
+            sqlCheck();
+          // If request found then we are still waiting for the response
+            if sqlGetFound();
+              api.respCode = 'PENDING';
+              api.respHeader = 'Awaiting response';
+          // If request not found then it's an error
+            else;
+              api.status   = *blank;
+              api.respCode = 'APINOTFND';
+              api.respHeader = 'No WS request for ID';
+            endIf;
+
+          // Catch all
+          other;
+            api.status = 'APISQLERR';
+            api.respCode = 'APIERR';
+            api.respHeader = 'Unknown SQL error';
+          endSl;
+
+          return;
+
+        end-proc;
+
+      //---------------------------------------------------------------
+      // API Get WS Request ID
+      //---------------------------------------------------------------
+        dcl-proc apiGetWSRequestID export;
+          dcl-pi *n like(api.requestID);
+          end-pi;
+
+          return api.requestID;
+        end-proc;
+
+      //---------------------------------------------------------------
+      // API Get WS Status
+      //---------------------------------------------------------------
+        dcl-proc apiGetWSStatus export;
+          dcl-pi *n like(api.status);
+          end-pi;
+
+          return api.status;
+        end-proc;
+
+      //---------------------------------------------------------------
+      // API Get WS Response code
+      //---------------------------------------------------------------
+        dcl-proc apiGetWSRespCode export;
+          dcl-pi *n like(api.respCode);
+          end-pi;
+
+          return api.respCode;
+        end-proc;
+
+      //---------------------------------------------------------------
+      // API Get WS Response header
+      //---------------------------------------------------------------
+        dcl-proc apiGetWSRespHeader export;
+          dcl-pi *n like(api.respHeader)
+          end-pi;
+
+          return api.respHeader;
+        end-proc;
+
+      //---------------------------------------------------------------
+      // API Get WS Response
+      //---------------------------------------------------------------
+        dcl-proc apiGetWSRespPayload export;
+          dcl-pi *n like(api.response);
+          end-pi;
+
+          return api.response;
+        end-proc;
+

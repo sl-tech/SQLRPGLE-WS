@@ -1,0 +1,68 @@
+      //*********************************************************************
+      //  C runtime functions
+      //*********************************************************************
+
+      //*********************************************************************
+      //  fopen - open file for buffered reading or writing
+      //    path - ifs to file
+      //    mode - see below
+      //
+      //  r - Open a text file for reading. The file must exist.
+      //  w - Create a text file for writing. If the given file exists, its
+      //      contents are destroyed unless it is a logical file.
+      //  a - Open a text file in append mode for writing at the end of the
+      //      file. The fopen() function creates the file if it does not
+      //      exist and is not a logical file
+      //*********************************************************************
+       dcl-pr fopen pointer   extproc('_C_IFS_fopen');
+         path     pointer   value options(*string);
+         mode     pointer   value options(*string);
+       end-pr;
+
+      //*********************************************************************
+      //  fgets - read a string
+      //    string - string read (null at end)
+      //    size   - max size of string
+      //    stream - file structure to read data from
+      //  returns pointer to read string
+      //  returns *null if EOF or error
+      //*********************************************************************
+       dcl-pr fgets pointer   extproc('_C_IFS_fgets');
+         string   pointer   value;
+         size     int(10:0) value;
+         stream   pointer   value;
+       end-pr;
+
+      //*********************************************************************
+      //  fputs - writes a string
+      //    string - string to write (null at end)
+      //    stream - file structure to write to
+      //  returns 0 or > 0 if ok
+      //  returns -1 if error
+      //*********************************************************************
+       dcl-pr fputs pointer   extproc('_C_IFS_fputs');
+         string   pointer   value;
+         stream   pointer   value;
+       end-pr;
+
+      //*********************************************************************
+      //  fflush - flush a stream
+      //    stream - pointer to file structure to flush
+      //  returns  0 if ok
+      //  returns -1 if error
+      //*********************************************************************
+       dcl-pr fflush pointer   extproc('_C_IFS_fflush');
+         stream    pointer   value;
+       end-pr;
+
+       dcl-pr fwrite pointer   extproc('_C_IFS_fwrite');
+         data      pointer   value;
+         dataSize  int(10:0) value;
+         blockSize int(10:0) value;
+         count     pointer   value;
+       end-pr;
+
+       dcl-pr fclose          extproc('_C_IFS_fclose');
+         misc     pointer   value;
+       end-pr;
+

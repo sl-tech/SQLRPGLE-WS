@@ -1,0 +1,6 @@
+             PGM
+             RUNSQLSTM  SRCFILE(*LIBL/QSQLSRC) SRCMBR(ENDWSP) +
+                          COMMIT(*NONE)
+             SNDPGMMSG  MSGID(CPF9898) MSGF(QCPFMSG) MSGDTA('Touch +
+                          processors ending') TOPGMQ(*EXT)
+             ENDPGM

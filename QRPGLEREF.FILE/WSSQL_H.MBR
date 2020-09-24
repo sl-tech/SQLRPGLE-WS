@@ -1,0 +1,25 @@
+        // SQL procedures
+
+        dcl-pr sqlCheck;
+        end-pr;
+
+        dcl-pr sqlGetState char(5);
+        end-pr;
+
+        dcl-pr sqlGetMesgID char(7);
+        end-pr;
+
+        dcl-pr sqlGetMesgText varchar(1024);
+        end-pr;
+
+        dcl-pr sqlGetHelpText varchar(1024);
+        end-pr;
+
+        dcl-pr sqlGetOK ind;
+        end-pr;
+
+        dcl-pr sqlGetEOF ind;
+        end-pr;
+
+        dcl-pr sqlGetFound ind;
+        end-pr;
