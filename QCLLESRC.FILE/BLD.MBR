@@ -1,6 +1,6 @@
-             PGM        PARM(&FILE &LIB)
+             PGM        PARM(&LIB &FILE)
              DCL        VAR(&FILE) TYPE(*CHAR) LEN(4)
-			 DCL        VAR(&LIB) TYPE(*CHAR) LEN(10)  VALUE('TOUCH')
+             DCL        VAR(&LIB) TYPE(*CHAR) LEN(10)  VALUE('TOUCH')
              DLTSPLF    FILE(*SELECT)
              /* Files */
              CHGPFM     FILE(&LIB/QSQLSRC) MBR(TOUCHTRX) SRCTYPE(SQL)
