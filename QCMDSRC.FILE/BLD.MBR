@@ -1,7 +1,6 @@
              CMD        PROMPT('Build Touch Web Service Client')
-			 PARM       KWD(BLDLIB) TYPE(*CHAR) LEN(10) MIN(1) +
-               			 PROMPT('Build library')	
-			 PARM       KWD(BLDFILES) TYPE(*CHAR) LEN(4) RSTD(*YES) +
+             PARM       KWD(BLDLIB) TYPE(*CHAR) LEN(10) MIN(1) +
+                          PROMPT('Build library')
+             PARM       KWD(BLDFILES) TYPE(*CHAR) LEN(4) RSTD(*YES) +
                           DFT(*NO) VALUES(*YES *NO) PROMPT('Build +
                           files?')
-		  
