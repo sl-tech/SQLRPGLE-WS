@@ -3,14 +3,14 @@
              DCL        VAR(&LIB) TYPE(*CHAR) LEN(10)  VALUE('TOUCH')
              DLTSPLF    FILE(*SELECT)
              /* Files */
-             CHGCURLIB  &LIB
+             CHGCURLIB  CURLIB(&LIB)
              CHGPFM     FILE(&LIB/QSQLSRC) MBR(TOUCHTRX) SRCTYPE(SQL)
              CHGPFM     FILE(&LIB/QSQLSRC) MBR(TOUCHCFG) SRCTYPE(SQL)
              IF         COND(&FILE *EQ '*YES') THEN(DO)
+             RUNSQLSTM  SRCFILE(&LIB/QSQLSRC) SRCMBR(TOUCHCFG) +
+                          COMMIT(*NONE) ERRLVL(30)
              RUNSQLSTM  SRCFILE(&LIB/QSQLSRC) SRCMBR(TOUCHTRX) +
                           COMMIT(*NONE) ERRLVL(30)
-             RUNSQLSTM  SRCFILE(&LIB/QSQLSRC) SRCMBR(TOUCHCFG) +
-                          COMMIT(*NONE) ERRLVL(30)                  
              ENDDO
              /* Service programs */
              CHGPFM     FILE(&LIB/QRPGLESRC) MBR(WSLOG) SRCTYPE(RPGLE)
